@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
+import { supabase } from './lib/supabase';
+
 import Navbar from './components/Navbar';
 import AuthPage from './pages/AuthPage';
 import HomePage from './pages/HomePage';
@@ -49,6 +51,22 @@ const AppRoutes: React.FC = () => {
 };
 
 function App() {
+  useEffect(() => {
+  const testConnection = async () => {
+    console.log("🚀 Testing Supabase...");
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .limit(1);
+
+    console.log("Data:", data);
+    console.log("Error:", error);
+  };
+
+  testConnection();
+}, []);
+
   return (
     <AuthProvider>
       <DataProvider>
