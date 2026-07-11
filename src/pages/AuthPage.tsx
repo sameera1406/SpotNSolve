@@ -1,49 +1,79 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { User, Shield, Phone, Lock, UserPlus } from 'lucide-react';
+import { User, Shield, Mail, Lock, UserPlus } from 'lucide-react';
 
 const AuthPage: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<'user' | 'admin' | null>(null);
   const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({
-    username: '',
-    phone: '',
-    password: '',
-    adminId: ''
-  });
 
-  const { login } = useAuth();
+ const [formData, setFormData] = useState({
+  username: '',
+  email: '',
+  password: ''
+});
+
+  const { login, signup, role } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (selectedRole === 'admin') {
-      // Simple admin validation
-      if (formData.adminId === 'admin123' && formData.password === 'admin123') {
-        login({
-          id: 'admin1',
-          username: 'Administrator',
-          phone: '',
-          role: 'admin'
-        });
-        navigate('/admin');
-      } else {
-        alert('Invalid admin credentials');
-      }
-    } else {
-      // User authentication (simplified)
-      login({
-        id: Date.now().toString(),
-        username: formData.username,
-        phone: formData.phone,
-        role: 'user',
-        points: 0
-      });
-      navigate('/home');
+  const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  // ---------- ADMIN ----------
+  const { error } = await login(
+  formData.email,
+  formData.password
+);
+
+if (error) {
+  alert(error.message);
+  return;
+}
+
+  // ---------- USER ----------
+ try {
+  if (isLogin) {
+    const { error } = await login(
+      formData.email,
+      formData.password
+    );
+
+    if (error) {
+      alert(error.message);
+      return;
     }
-  };
+
+    // Wait a moment so AuthContext can fetch the role
+    setTimeout(() => {
+      if (role === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/home");
+      }
+    }, 500);
+
+  } else {
+    const { error } = await signup(
+      formData.email,
+      formData.password,
+      formData.username
+    );
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    alert("Signup successful! Please verify your email.");
+
+    setIsLogin(true);
+  }
+}
+catch (err) {
+  console.error(err);
+  alert("Something went wrong.");
+}
+};
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -57,8 +87,12 @@ const AuthPage: React.FC = () => {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Spot & Solve</h1>
-            <p className="text-gray-600">Choose your role to continue</p>
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">
+              Spot & Solve
+            </h1>
+            <p className="text-gray-600">
+              Choose your role to continue
+            </p>
           </div>
 
           <div className="space-y-4">
@@ -71,8 +105,12 @@ const AuthPage: React.FC = () => {
                   <User className="text-blue-600" size={24} />
                 </div>
                 <div className="text-left">
-                  <h3 className="text-lg font-semibold text-gray-800">User</h3>
-                  <p className="text-gray-600 text-sm">Report issues and track progress</p>
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    User
+                  </h3>
+                  <p className="text-gray-600 text-sm">
+                    Report issues and track progress
+                  </p>
                 </div>
               </div>
             </button>
@@ -86,8 +124,12 @@ const AuthPage: React.FC = () => {
                   <Shield className="text-green-600" size={24} />
                 </div>
                 <div className="text-left">
-                  <h3 className="text-lg font-semibold text-gray-800">Administrator</h3>
-                  <p className="text-gray-600 text-sm">Manage reports and users</p>
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    Administrator
+                  </h3>
+                  <p className="text-gray-600 text-sm">
+                    Manage reports and users
+                  </p>
                 </div>
               </div>
             </button>
@@ -108,17 +150,22 @@ const AuthPage: React.FC = () => {
             >
               ←
             </button>
+
             <h1 className="text-3xl font-bold text-gray-800">
-              {selectedRole === 'admin' ? 'Admin Login' : isLogin ? 'Sign In' : 'Sign Up'}
+              {selectedRole === 'admin'
+                ? 'Admin Login'
+                : isLogin
+                ? 'Sign In'
+                : 'Sign Up'}
             </h1>
           </div>
+
           <p className="text-gray-600">
-            {selectedRole === 'admin' 
-              ? 'Enter your admin credentials' 
-              : isLogin 
-                ? 'Welcome back!' 
-                : 'Create your account'
-            }
+            {selectedRole === 'admin'
+              ? 'Enter your admin credentials'
+              : isLogin
+              ? 'Welcome back!'
+              : 'Create your account'}
           </p>
         </div>
 
@@ -126,19 +173,26 @@ const AuthPage: React.FC = () => {
           {selectedRole === 'admin' ? (
             <>
               <div className="relative">
-                <Shield className="absolute left-3 top-3 text-gray-400" size={20} />
-                <input
-                  type="text"
-                  name="adminId"
-                  placeholder="Admin ID"
-                  value={formData.adminId}
-                  onChange={handleInputChange}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  required
+                <Shield
+                  className="absolute left-3 top-3 text-gray-400"
+                  size={20}
                 />
+                <input
+                    type="email"
+                    name="email"
+                    placeholder="Admin Email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    required
+                    />
               </div>
+
               <div className="relative">
-                <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
+                <Lock
+                  className="absolute left-3 top-3 text-gray-400"
+                  size={20}
+                />
                 <input
                   type="password"
                   name="password"
@@ -153,7 +207,10 @@ const AuthPage: React.FC = () => {
           ) : (
             <>
               <div className="relative">
-                <User className="absolute left-3 top-3 text-gray-400" size={20} />
+                <User
+                  className="absolute left-3 top-3 text-gray-400"
+                  size={20}
+                />
                 <input
                   type="text"
                   name="username"
@@ -164,20 +221,25 @@ const AuthPage: React.FC = () => {
                   required
                 />
               </div>
+
               <div className="relative">
-                <Phone className="absolute left-3 top-3 text-gray-400" size={20} />
-                <input
-                  type="tel"
-                  name="phone"
-                  placeholder="Phone Number"
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
+                <Mail className="absolute left-3 top-3 text-gray-400" size={20} />
+                    <input
+                    type="email"
+                    name="email"
+                    placeholder="Admin Email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    required
+                    />  
               </div>
+
               <div className="relative">
-                <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
+                <Lock
+                  className="absolute left-3 top-3 text-gray-400"
+                  size={20}
+                />
                 <input
                   type="password"
                   name="password"
@@ -199,7 +261,11 @@ const AuthPage: React.FC = () => {
                 : 'bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-200'
             }`}
           >
-            {selectedRole === 'admin' ? 'Sign In as Admin' : isLogin ? 'Sign In' : 'Sign Up'}
+            {selectedRole === 'admin'
+              ? 'Sign In as Admin'
+              : isLogin
+              ? 'Sign In'
+              : 'Sign Up'}
           </button>
 
           {selectedRole === 'user' && (
@@ -210,7 +276,11 @@ const AuthPage: React.FC = () => {
                 className="text-blue-600 hover:text-blue-800 text-sm flex items-center justify-center space-x-1 mx-auto"
               >
                 <UserPlus size={16} />
-                <span>{isLogin ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}</span>
+                <span>
+                  {isLogin
+                    ? "Don't have an account? Sign Up"
+                    : 'Already have an account? Sign In'}
+                </span>
               </button>
             </div>
           )}

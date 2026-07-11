@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
+
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
-import { supabase } from './lib/supabase';
+
 
 import Navbar from './components/Navbar';
 import AuthPage from './pages/AuthPage';
@@ -15,7 +15,18 @@ import ContactPage from './pages/ContactPage';
 import AdminDashboard from './pages/AdminDashboard';
 
 const AppRoutes: React.FC = () => {
-  const { isAuthenticated, role } = useAuth();
+ const {
+  isAuthenticated,
+  role,
+  loading,
+} = useAuth();
+if (loading) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      Loading...
+    </div>
+  );
+}
 
   if (!isAuthenticated) {
     return <AuthPage />;
@@ -51,21 +62,6 @@ const AppRoutes: React.FC = () => {
 };
 
 function App() {
-  useEffect(() => {
-  const testConnection = async () => {
-    console.log("🚀 Testing Supabase...");
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .limit(1);
-
-    console.log("Data:", data);
-    console.log("Error:", error);
-  };
-
-  testConnection();
-}, []);
 
   return (
     <AuthProvider>
