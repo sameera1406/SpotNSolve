@@ -49,8 +49,6 @@ Spot & Solve addresses these challenges with a modern, user-friendly, and scalab
 - Upvote Existing Issues
 - Duplicate Issue Detection
 - Issue Timeline Tracking
-- Notifications
-- Citizen Resolution Verification
 - Edit Own Issues
 - Profile Management
 - Comment on Issues
