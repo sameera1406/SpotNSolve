@@ -17,63 +17,37 @@ const AuthPage: React.FC = () => {
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  // ---------- ADMIN ----------
-  const { error } = await login(
-  formData.email,
-  formData.password
-);
-
-if (error) {
-  alert(error.message);
-  return;
-}
-
-  // ---------- USER ----------
- try {
-  if (isLogin) {
-    const { error } = await login(
-      formData.email,
-      formData.password
-    );
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    // Wait a moment so AuthContext can fetch the role
-    setTimeout(() => {
-      if (role === "admin") {
-        navigate("/admin");
+    try {
+      if (selectedRole === 'admin') {
+        const { error } = await login(formData.email, formData.password);
+        if (error) {
+          alert(error.message);
+          return;
+        }
       } else {
-        navigate("/home");
+        if (isLogin) {
+          const { error } = await login(formData.email, formData.password);
+          if (error) {
+            alert(error.message);
+            return;
+          }
+        } else {
+          const { error } = await signup(formData.email, formData.password, formData.username);
+          if (error) {
+            alert(error.message);
+            return;
+          }
+          alert("Signup successful! Please log in.");
+          setIsLogin(true);
+        }
       }
-    }, 500);
-
-  } else {
-    const { error } = await signup(
-      formData.email,
-      formData.password,
-      formData.username
-    );
-
-    if (error) {
-      alert(error.message);
-      return;
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong.");
     }
-
-    alert("Signup successful! Please verify your email.");
-
-    setIsLogin(true);
-  }
-}
-catch (err) {
-  console.error(err);
-  alert("Something went wrong.");
-}
-};
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({

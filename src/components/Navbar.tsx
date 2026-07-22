@@ -5,7 +5,7 @@ import { LogOut, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 
 const Navbar: React.FC = () => {
-  const { isAuthenticated, user, logout, role } = useAuth();
+  const { isAuthenticated, profile, logout, role } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -72,7 +72,7 @@ const Navbar: React.FC = () => {
           {/* User Info & Logout */}
           <div className="hidden md:flex items-center space-x-4">
             <span className="text-gray-700 text-sm">
-              Welcome, <span className="font-semibold text-blue-600">{user?.username}</span>
+              Welcome, <span className="font-semibold text-blue-600">{profile?.username}</span>
               {role === 'admin' && <span className="ml-1 text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">Admin</span>}
             </span>
             <button
@@ -116,7 +116,7 @@ const Navbar: React.FC = () => {
             ))}
             <div className="border-t border-gray-200 pt-4 pb-3">
               <div className="px-3 text-gray-700 text-sm mb-2">
-                Welcome, <span className="font-semibold text-blue-600">{user?.username}</span>
+                Welcome, <span className="font-semibold text-blue-600">{profile?.username}</span>
                 {role === 'admin' && <span className="ml-2 text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">Admin</span>}
               </div>
               <button

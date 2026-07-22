@@ -1,13 +1,37 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Report, Poll } from '../types';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  ReactNode,
+} from 'react';
+import type { Report, Category, LeaderboardEntry, IssueStatus } from '../types';
+import { fetchIssues, createIssue, updateIssueStatus } from '../services/issueService';
+import { fetchCategories } from '../services/categoryService';
+import { castVote, removeVote, getUserVotedIssueIds } from '../services/voteService';
+import { fetchLeaderboard } from '../services/profileService';
+import { useAuth } from './AuthContext';
 
+// =====================================
+// Context interface
+// =====================================
 interface DataContextType {
   reports: Report[];
-  polls: Poll[];
-  addReport: (report: Omit<Report, 'id' | 'createdAt'>) => void;
-  updateReportStatus: (id: string, status: Report['status']) => void;
-  voteOnPoll: (reportId: string, userId: string) => void;
-  getLeaderboard: () => Array<{ username: string; points: number; reports: number }>;
+  categories: Category[];
+  loadingReports: boolean;
+  loadingCategories: boolean;
+  /** IDs of issues the current user has already voted on */
+  votedIssueIds: Set<string>;
+  addReport: (
+    payload: Omit<Report, 'id' | 'createdAt' | 'votes' | 'username' | 'imageUrl'> & {
+      imageFile?: File | null;
+    }
+  ) => Promise<void>;
+  updateReportStatus: (id: string, status: IssueStatus) => Promise<void>;
+  voteOnPoll: (reportId: string, userId: string) => Promise<void>;
+  getLeaderboard: () => Promise<LeaderboardEntry[]>;
+  refreshReports: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -25,126 +49,164 @@ interface DataProviderProps {
 }
 
 export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
-  const [reports, setReports] = useState<Report[]>([
-    {
-      id: '1',
-      title: 'Pothole on Main Street',
-      description: 'Large pothole causing traffic issues',
-      location: 'Main Street & 5th Ave',
-      status: 'submitted',
-      userId: 'user1',
-      username: 'john_doe',
-      votes: 15,
-      createdAt: new Date('2024-01-15'),
-      category: 'Road Maintenance'
-    },
-    {
-      id: '2',
-      title: 'Broken Streetlight',
-      description: 'Streetlight not working for past week',
-      location: 'Oak Avenue',
-      status: 'acknowledged',
-      userId: 'user2',
-      username: 'jane_smith',
-      votes: 8,
-      createdAt: new Date('2024-01-14'),
-      category: 'Public Safety'
-    },
-    {
-      id: '3',
-      title: 'Park Bench Vandalism',
-      description: 'Graffiti on park benches',
-      location: 'Central Park',
-      status: 'resolved',
-      userId: 'user3',
-      username: 'mike_wilson',
-      votes: 12,
-      createdAt: new Date('2024-01-13'),
-      category: 'Vandalism'
+  const { user } = useAuth();
+
+  const [reports, setReports] = useState<Report[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [votedIssueIds, setVotedIssueIds] = useState<Set<string>>(new Set());
+  const [loadingReports, setLoadingReports] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+
+  // -----------------------------------------------------------------------
+  // Load categories once on mount (public — no auth required)
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    setLoadingCategories(true);
+    fetchCategories()
+      .then(setCategories)
+      .catch((err) => console.error('[DataContext] fetchCategories:', err))
+      .finally(() => setLoadingCategories(false));
+  }, []);
+
+  // -----------------------------------------------------------------------
+  // Load issues whenever auth state changes
+  // -----------------------------------------------------------------------
+  const loadReports = useCallback(async () => {
+    setLoadingReports(true);
+    try {
+      const data = await fetchIssues();
+      setReports(data);
+    } catch (err) {
+      console.error('[DataContext] fetchIssues:', err);
+    } finally {
+      setLoadingReports(false);
     }
-  ]);
+  }, []);
 
-  const [polls, setPolls] = useState<Poll[]>([
-    { id: '1', reportId: '1', votes: 15, voters: ['user1', 'user2', 'user3'] },
-    { id: '2', reportId: '2', votes: 8, voters: ['user1', 'user4'] },
-    { id: '3', reportId: '3', votes: 12, voters: ['user2', 'user3', 'user4'] }
-  ]);
+  useEffect(() => {
+    loadReports();
+  }, [loadReports]);
 
-  const addReport = (reportData: Omit<Report, 'id' | 'createdAt'>) => {
-    const newReport: Report = {
-      ...reportData,
-      id: Date.now().toString(),
-      createdAt: new Date(),
-    };
-    
-    setReports(prev => [newReport, ...prev]);
-    
-    // Create corresponding poll
-    const newPoll: Poll = {
-      id: Date.now().toString(),
-      reportId: newReport.id,
-      votes: 0,
-      voters: []
-    };
-    setPolls(prev => [newPoll, ...prev]);
-  };
+  // -----------------------------------------------------------------------
+  // Load the set of issue IDs the current user has voted on
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (!user) {
+      setVotedIssueIds(new Set());
+      return;
+    }
 
-  const updateReportStatus = (id: string, status: Report['status']) => {
-    setReports(prev => prev.map(report => 
-      report.id === id ? { ...report, status } : report
-    ));
-  };
+    getUserVotedIssueIds(user.id)
+      .then((ids) => setVotedIssueIds(new Set(ids)))
+      .catch((err) => console.error('[DataContext] getUserVotedIssueIds:', err));
+  }, [user]);
 
-  const voteOnPoll = (reportId: string, userId: string) => {
-    setPolls(prev => prev.map(poll => {
-      if (poll.reportId === reportId && !poll.voters.includes(userId)) {
-        return {
-          ...poll,
-          votes: poll.votes + 1,
-          voters: [...poll.voters, userId]
-        };
+  // -----------------------------------------------------------------------
+  // addReport: create a new issue via issueService
+  // -----------------------------------------------------------------------
+  const addReport = useCallback(
+    async (
+      payload: Omit<Report, 'id' | 'createdAt' | 'votes' | 'username' | 'imageUrl'> & {
+        imageFile?: File | null;
       }
-      return poll;
-    }));
+    ) => {
+      if (!user) throw new Error('User not authenticated');
 
-    // Update report votes
-    setReports(prev => prev.map(report => {
-      if (report.id === reportId) {
-        const poll = polls.find(p => p.reportId === reportId);
-        return { ...report, votes: poll ? poll.votes + 1 : report.votes };
+      const { imageFile, ...rest } = payload;
+
+      await createIssue({
+        title: rest.title,
+        description: rest.description,
+        location: rest.location,
+        categoryId: rest.categoryId,
+        userId: rest.userId,
+        imageFile: imageFile ?? null,
+      });
+
+      // Refresh the reports list after creation
+      await loadReports();
+    },
+    [user, loadReports]
+  );
+
+  // -----------------------------------------------------------------------
+  // updateReportStatus: admin changes status via issueService
+  // -----------------------------------------------------------------------
+  const updateReportStatus = useCallback(
+    async (id: string, status: IssueStatus) => {
+      await updateIssueStatus(id, status);
+
+      // Optimistic update in local state
+      setReports((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status } : r))
+      );
+    },
+    []
+  );
+
+  // -----------------------------------------------------------------------
+  // voteOnPoll: toggle vote via voteService
+  // -----------------------------------------------------------------------
+  const voteOnPoll = useCallback(
+    async (reportId: string, userId: string) => {
+      const alreadyVoted = votedIssueIds.has(reportId);
+
+      if (alreadyVoted) {
+        await removeVote(reportId, userId);
+        setVotedIssueIds((prev) => {
+          const next = new Set(prev);
+          next.delete(reportId);
+          return next;
+        });
+        // Optimistic decrement
+        setReports((prev) =>
+          prev.map((r) =>
+            r.id === reportId ? { ...r, votes: Math.max(0, r.votes - 1) } : r
+          )
+        );
+      } else {
+        await castVote(reportId, userId);
+        setVotedIssueIds((prev) => new Set(prev).add(reportId));
+        // Optimistic increment
+        setReports((prev) =>
+          prev.map((r) =>
+            r.id === reportId ? { ...r, votes: r.votes + 1 } : r
+          )
+        );
       }
-      return report;
-    }));
-  };
+    },
+    [votedIssueIds]
+  );
 
-  const getLeaderboard = () => {
-    const userStats = reports.reduce((acc, report) => {
-      if (!acc[report.username]) {
-        acc[report.username] = { reports: 0, totalVotes: 0 };
-      }
-      acc[report.username].reports += 1;
-      acc[report.username].totalVotes += report.votes;
-      return acc;
-    }, {} as Record<string, { reports: number; totalVotes: number }>);
+  // -----------------------------------------------------------------------
+  // getLeaderboard: fetch from profileService
+  // -----------------------------------------------------------------------
+  const getLeaderboard = useCallback(async (): Promise<LeaderboardEntry[]> => {
+    return fetchLeaderboard();
+  }, []);
 
-    return Object.entries(userStats)
-      .map(([username, stats]) => ({
-        username,
-        points: stats.reports * 10 + stats.totalVotes * 2,
-        reports: stats.reports
-      }))
-      .sort((a, b) => b.points - a.points);
-  };
+  // -----------------------------------------------------------------------
+  // Public refresh trigger
+  // -----------------------------------------------------------------------
+  const refreshReports = useCallback(async () => {
+    await loadReports();
+  }, [loadReports]);
 
   return (
-    <DataContext.Provider value={{
-      reports,
-      polls,
-      addReport,
-      updateReportStatus,
-      voteOnPoll,
-      getLeaderboard
-    }}>
+    <DataContext.Provider
+      value={{
+        reports,
+        categories,
+        loadingReports,
+        loadingCategories,
+        votedIssueIds,
+        addReport,
+        updateReportStatus,
+        voteOnPoll,
+        getLeaderboard,
+        refreshReports,
+      }}
+    >
       {children}
     </DataContext.Provider>
   );

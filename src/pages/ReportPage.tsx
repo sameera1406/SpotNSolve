@@ -5,43 +5,30 @@ import { useNavigate } from 'react-router-dom';
 import { Camera, MapPin, FileText, Send, CheckCircle } from 'lucide-react';
 
 const ReportPage: React.FC = () => {
+  const { categories, loadingCategories, addReport } = useData();
+  const { user, profile } = useAuth();
+  const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     location: '',
-    category: 'Road Maintenance',
-    photo: null as File | null
+    categoryId: '' as string,
+    photo: null as File | null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const { addReport } = useData();
-  const { user } = useAuth();
-  const navigate = useNavigate();
-
-  const categories = [
-    'Road Maintenance',
-    'Public Safety',
-    'Utilities',
-    'Sanitation',
-    'Parks & Recreation',
-    'Vandalism',
-    'Other'
-  ];
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
-    setFormData({
-      ...formData,
-      photo: file
-    });
+    setFormData({ ...formData, photo: file });
   };
 
   const captureLocation = () => {
@@ -51,7 +38,7 @@ const ReportPage: React.FC = () => {
           const { latitude, longitude } = position.coords;
           setFormData({
             ...formData,
-            location: `Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}`
+            location: `Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}`,
           });
         },
         () => {
@@ -65,40 +52,48 @@ const ReportPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!user) return;
-    
+
+    if (!user || !profile) return;
+
     setIsSubmitting(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      addReport({
+    setError(null);
+
+    try {
+      // Resolve category ID
+      const selectedCategoryId = formData.categoryId
+        ? parseInt(formData.categoryId, 10)
+        : null;
+
+      await addReport({
         title: formData.title,
         description: formData.description,
         location: formData.location,
-        status: 'submitted',
+        status: 'Pending',
+        priority: 'Medium',
         userId: user.id,
-        username: user.username,
-        votes: 0,
-        category: formData.category
+        category: categories.find((c) => c.id === selectedCategoryId)?.name ?? null,
+        categoryId: selectedCategoryId,
+        imageFile: formData.photo,
       });
-      
-      setIsSubmitting(false);
+
       setSubmitted(true);
-      
-      // Reset form after delay
+
+      // Reset and redirect after short delay
       setTimeout(() => {
         setSubmitted(false);
         setFormData({
           title: '',
           description: '',
           location: '',
-          category: 'Road Maintenance',
-          photo: null
+          categoryId: '',
+          photo: null,
         });
         navigate('/dashboard');
       }, 2000);
-    }, 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit report. Please try again.');
+      setIsSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -109,7 +104,10 @@ const ReportPage: React.FC = () => {
             <CheckCircle className="text-green-600" size={40} />
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-4">Report Submitted Successfully!</h2>
-          <p className="text-gray-600 mb-6">Your report has been submitted and is now visible to the community. A poll has been automatically created for voting.</p>
+          <p className="text-gray-600 mb-6">
+            Your report has been submitted and is now visible to the community. A poll has been
+            automatically created for voting.
+          </p>
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
           <p className="text-sm text-gray-500 mt-2">Redirecting to dashboard...</p>
         </div>
@@ -125,6 +123,12 @@ const ReportPage: React.FC = () => {
             <h1 className="text-3xl font-bold text-gray-800 mb-2">Report an Issue</h1>
             <p className="text-gray-600">Help make your community better by reporting civic issues</p>
           </div>
+
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Title */}
@@ -148,14 +152,20 @@ const ReportPage: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
               <select
-                name="category"
-                value={formData.category}
+                name="categoryId"
+                value={formData.categoryId}
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
+                disabled={loadingCategories}
               >
-                {categories.map(category => (
-                  <option key={category} value={category}>{category}</option>
+                <option value="">
+                  {loadingCategories ? 'Loading categories...' : 'Select a category'}
+                </option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
                 ))}
               </select>
             </div>

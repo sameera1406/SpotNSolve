@@ -24,8 +24,14 @@ if (loading) {
   return (
     <div className="min-h-screen flex items-center justify-center">
       Loading...
+      
     </div>
   );
+  console.log({
+  loading,
+  isAuthenticated,
+  role,
+});
 }
 
   if (!isAuthenticated) {
