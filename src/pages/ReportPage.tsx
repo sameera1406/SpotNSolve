@@ -53,16 +53,18 @@ const ReportPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!user || !profile) return;
+    if (!user) {
+      setError('You must be logged in to submit a report.');
+      return;
+    }
 
     setIsSubmitting(true);
     setError(null);
 
     try {
-      // Resolve category ID
-      const selectedCategoryId = formData.categoryId
-        ? parseInt(formData.categoryId, 10)
-        : null;
+      // Resolve category ID safely
+      const parsedCatId = formData.categoryId ? parseInt(formData.categoryId, 10) : null;
+      const selectedCategoryId = parsedCatId && !isNaN(parsedCatId) ? parsedCatId : null;
 
       await addReport({
         title: formData.title,
@@ -91,6 +93,7 @@ const ReportPage: React.FC = () => {
         navigate('/dashboard');
       }, 2000);
     } catch (err) {
+      console.error('[ReportPage] handleSubmit error:', err);
       setError(err instanceof Error ? err.message : 'Failed to submit report. Please try again.');
       setIsSubmitting(false);
     }

@@ -287,6 +287,15 @@ const AdminDashboard: React.FC = () => {
                           </span>
                         </div>
                         <p className="text-gray-600 mb-3">{report.description}</p>
+                        {report.imageUrl && (
+                          <div className="mb-3 mt-2">
+                            <img
+                              src={report.imageUrl}
+                              alt={report.title}
+                              className="max-h-56 w-auto rounded-lg border border-gray-200 object-cover"
+                            />
+                          </div>
+                        )}
                         <div className="flex items-center space-x-6 text-sm text-gray-500">
                           <span className="flex items-center space-x-1">
                             <MapPin size={16} />

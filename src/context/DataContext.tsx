@@ -114,7 +114,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
       const { imageFile, ...rest } = payload;
 
-      await createIssue({
+      console.log('[DataContext] Creating report...', rest.title);
+      const newReport = await createIssue({
         title: rest.title,
         description: rest.description,
         location: rest.location,
@@ -123,7 +124,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
         imageFile: imageFile ?? null,
       });
 
-      // Refresh the reports list after creation
+      console.log('[DataContext] New report created, updating local state immediately:', newReport.id);
+      setReports((prev) => [newReport, ...prev.filter((r) => r.id !== newReport.id)]);
+
+      // Refresh the reports list from backend as well
       await loadReports();
     },
     [user, loadReports]

@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Session } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import type { Profile, UserRole } from '../types';
 
 interface AuthContextType {
   session: Session | null;
-  user: unknown;
+  user: User | null;
   profile: Profile | null;
   role: UserRole | null;
   isAuthenticated: boolean;
@@ -40,107 +40,83 @@ export const AuthProvider = ({
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Fetch the profile row for a given user ID
-const loadProfile = async (userId: string): Promise<Profile | null> => {
-  console.log("Loading profile for:", userId);
+  // Fetch the profile row for a given user ID safely with timeout protection
+  const loadProfile = async (userId: string): Promise<Profile | null> => {
+    console.log('[AuthContext] Loading profile for userId:', userId);
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .single();
+    try {
+      const queryPromise = supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-  console.log("Profile data:", data);
-  console.log("Profile error:", error);
+      const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { message: 'Profile query timeout' } }), 4000)
+      );
 
-  if (error) {
-    console.warn("[AuthContext] loadProfile error:", error.message);
-    return null;
-  }
+      const res = await Promise.race([queryPromise, timeoutPromise]);
 
-  return data as Profile;
-};
+      if (res.error) {
+        console.warn('[AuthContext] loadProfile error/timeout:', res.error.message);
+        return null;
+      }
+
+      console.log('[AuthContext] Profile loaded:', res.data);
+      return res.data as Profile | null;
+    } catch (err) {
+      console.error('[AuthContext] loadProfile exception:', err);
+      return null;
+    }
+  };
+
   useEffect(() => {
-  console.log("1. AuthContext mounted");
+    let isMounted = true;
+    console.log('[AuthContext] Provider mounted');
 
-  supabase.auth.getSession().then(async ({ data: { session } }) => {
-    console.log("2. getSession finished", session);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[AuthContext] Auth state event:', event, session?.user?.id ?? 'No user');
 
-    setSession(session);
+      if (!isMounted) return;
+      setSession(session);
 
-    if (session?.user) {
-      console.log("3. Loading profile...");
-      const p = await loadProfile(session.user.id);
-      console.log("4. Profile loaded", p);
-      setProfile(p);
-    } else {
-      console.log("5. No session");
-      setProfile(null);
-    }
+      // Defer async database call to next macro-task tick to escape Supabase internal auth lock deadlock
+      setTimeout(async () => {
+        if (!isMounted) return;
 
-    console.log("6. Setting loading false");
-    setLoading(false);
-  }).catch((err) => {
-    console.error("Error in getSession:", err);
-    setLoading(false);
-  });
- 
+        try {
+          if (session?.user) {
+            const p = await loadProfile(session.user.id);
+            if (isMounted) {
+              if (p) {
+                setProfile(p);
+              } else {
+                setProfile((prev) => prev ?? null);
+              }
+            }
+          } else {
+            if (isMounted) {
+              setProfile(null);
+            }
+          }
+        } catch (err) {
+          console.error('[AuthContext] Error in onAuthStateChange handler:', err);
+        } finally {
+          if (isMounted) {
+            console.log('[AuthContext] Setting loading false from onAuthStateChange');
+            setLoading(false);
+          }
+        }
+      }, 0);
+    });
 
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange(async (_event, session) => {
-    console.log("7. Auth state changed", _event);
-
-    setSession(session);
-
-    if (session?.user) {
-      const p = await loadProfile(session.user.id);
-      console.log("8. Profile after auth change", p);
-      setProfile(p);
-    } else {
-      setProfile(null);
-    }
-
-    console.log("9. Setting loading false");
-    setLoading(false);
-  });
-
-  return () => subscription.unsubscribe();
-}, []);
-
-//   useEffect(() => {
-//     // Load initial session
-//     supabase.auth.getSession().then(async ({ data: { session } }) => {
-//       setSession(session);
-
-//       if (session?.user) {
-//         const p = await loadProfile(session.user.id);
-//         setProfile(p);
-//       } else {
-//         setProfile(null);
-//       }
-
-//       setLoading(false);
-//     });
-
-//     // Listen for auth state changes
-//     const {
-//       data: { subscription },
-//     } = supabase.auth.onAuthStateChange(async (_event, session) => {
-//       setSession(session);
-
-//       if (session?.user) {
-//         const p = await loadProfile(session.user.id);
-//         setProfile(p);
-//       } else {
-//         setProfile(null);
-//       }
-
-//       setLoading(false);
-//     });
-
-//     return () => subscription.unsubscribe();
-//   }, []);
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // User Signup
   const signup = async (
@@ -148,6 +124,7 @@ const loadProfile = async (userId: string): Promise<Profile | null> => {
     password: string,
     username: string
   ) => {
+    console.log('[AuthContext] Signing up user:', email, username);
     return await supabase.auth.signUp({
       email,
       password,
@@ -162,6 +139,7 @@ const loadProfile = async (userId: string): Promise<Profile | null> => {
 
   // User Login
   const login = async (email: string, password: string) => {
+    console.log('[AuthContext] Logging in user:', email);
     return await supabase.auth.signInWithPassword({
       email,
       password,
@@ -170,7 +148,9 @@ const loadProfile = async (userId: string): Promise<Profile | null> => {
 
   // Logout
   const logout = async () => {
+    console.log('[AuthContext] Logging out');
     await supabase.auth.signOut();
+    setSession(null);
     setProfile(null);
   };
 

@@ -104,41 +104,58 @@ export interface CreateIssuePayload {
 export async function createIssue(payload: CreateIssuePayload): Promise<Report> {
   let imageUrl: string | null = null;
 
+  console.log('[issueService] createIssue called with payload:', payload);
+
   // Upload image if provided
   if (payload.imageFile) {
-    const fileExt = payload.imageFile.name.split('.').pop();
-    const fileName = `${payload.userId}/${Date.now()}.${fileExt}`;
+    try {
+      const fileExt = payload.imageFile.name.split('.').pop();
+      const fileName = `${payload.userId}/${Date.now()}.${fileExt}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('issue-images')
-      .upload(fileName, payload.imageFile, { upsert: false });
+      console.log('[issueService] Uploading image to storage bucket "issue-images"...', fileName);
 
-    if (uploadError) {
-      console.error('[issueService] image upload error:', uploadError.message);
-      // Non-fatal — proceed without image
-    } else {
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('issue-images')
+        .upload(fileName, payload.imageFile, { upsert: false });
+
+      if (uploadError) {
+        console.error('[issueService] Image upload error:', uploadError);
+        throw new Error(`Image upload failed: ${uploadError.message}`);
+      }
+
+      console.log('[issueService] Image uploaded successfully:', uploadData);
+
       const { data: urlData } = supabase.storage
         .from('issue-images')
         .getPublicUrl(fileName);
+
       imageUrl = urlData.publicUrl;
+      console.log('[issueService] Public URL generated:', imageUrl);
+    } catch (err) {
+      console.error('[issueService] Image upload failed:', err);
+      throw err;
     }
   }
 
+  const insertPayload = {
+    user_id: payload.userId,
+    category_id: payload.categoryId,
+    title: payload.title,
+    description: payload.description,
+    location: payload.location,
+    image_url: imageUrl,
+    latitude: payload.latitude ?? null,
+    longitude: payload.longitude ?? null,
+    status: 'Pending' as IssueStatus,
+    priority: 'Medium',
+    votes: 0,
+  };
+
+  console.log('[issueService] Inserting row into "issues" table:', insertPayload);
+
   const { data, error } = await supabase
     .from('issues')
-    .insert({
-      user_id: payload.userId,
-      category_id: payload.categoryId,
-      title: payload.title,
-      description: payload.description,
-      location: payload.location,
-      image_url: imageUrl,
-      latitude: payload.latitude ?? null,
-      longitude: payload.longitude ?? null,
-      status: 'Pending' as IssueStatus,
-      priority: 'Medium',
-      votes: 0,
-    })
+    .insert(insertPayload)
     .select(`
       *,
       profiles ( username, points ),
@@ -147,10 +164,11 @@ export async function createIssue(payload: CreateIssuePayload): Promise<Report> 
     .single();
 
   if (error) {
-    console.error('[issueService] createIssue error:', error.message);
-    throw new Error(error.message);
+    console.error('[issueService] createIssue database insert error:', error);
+    throw new Error(`Issue creation failed: ${error.message}`);
   }
 
+  console.log('[issueService] Issue created successfully in database:', data);
   return mapIssueToReport(data);
 }
 

@@ -180,33 +180,35 @@ const AuthPage: React.FC = () => {
             </>
           ) : (
             <>
+              {!isLogin && (
+                <div className="relative">
+                  <User
+                    className="absolute left-3 top-3 text-gray-400"
+                    size={20}
+                  />
+                  <input
+                    type="text"
+                    name="username"
+                    placeholder="Username"
+                    value={formData.username}
+                    onChange={handleInputChange}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required={!isLogin}
+                  />
+                </div>
+              )}
+
               <div className="relative">
-                <User
-                  className="absolute left-3 top-3 text-gray-400"
-                  size={20}
-                />
+                <Mail className="absolute left-3 top-3 text-gray-400" size={20} />
                 <input
-                  type="text"
-                  name="username"
-                  placeholder="Username"
-                  value={formData.username}
+                  type="email"
+                  name="email"
+                  placeholder="Email"
+                  value={formData.email}
                   onChange={handleInputChange}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                 />
-              </div>
-
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 text-gray-400" size={20} />
-                    <input
-                    type="email"
-                    name="email"
-                    placeholder="Admin Email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    required
-                    />  
               </div>
 
               <div className="relative">
